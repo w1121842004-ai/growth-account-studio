@@ -1,0 +1,119 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "product": "成长号工坊 Toutiao Ops Studio",
+    "designLanguage": "纸感编辑 Paper & Quiet",
+    "register": "product",
+    "threeAxis": { "variance": 5, "motion": 3, "density": 4 },
+    "note": "组件代码一律引用语义 Token（var(--bg) 等），禁止裸 hex（仅 #fff/#000 例外）。本文件是唯一色值来源。"
+  },
+  "color": {
+    "bg": { "value": "#FAFAF9", "type": "color", "desc": "暖纸白背景（stone-50）" },
+    "surface": { "value": "#FFFFFF", "type": "color", "desc": "纯白卡片表面" },
+    "surface-warm": { "value": "#F5F5F4", "type": "color", "desc": "浅暖灰三级表面（stone-100）" },
+    "fg": { "value": "#1C1917", "type": "color", "desc": "暖墨黑正文（stone-900）" },
+    "fg-2": { "value": "#44403C", "type": "color", "desc": "次级前景（stone-800）" },
+    "muted": { "value": "#78716C", "type": "color", "desc": "暖灰次要文字（stone-500）" },
+    "meta": { "value": "#A8A29E", "type": "color", "desc": "三级前景/元数据（stone-400）" },
+    "border": { "value": "#E7E5E4", "type": "color", "desc": "浅暖灰边框（stone-200，绝不用纯黑）" },
+    "border-soft": { "value": "#F5F5F4", "type": "color", "desc": "更浅分隔线（stone-100）" },
+    "accent": { "value": "#0F766E", "type": "color", "desc": "松绿强调（teal-700，唯一，仅 CTA/选中态/关键数据）" },
+    "accent-hover": { "value": "#115E59", "type": "color", "desc": "松绿悬停（teal-800）" },
+    "accent-active": { "value": "#134E4A", "type": "color", "desc": "松绿按下（teal-900）" },
+    "accent-on": { "value": "#FFFFFF", "type": "color", "desc": "accent 上的前景色" },
+    "accent-soft": { "value": "#CCFBF1", "type": "color", "desc": "松绿浅底（teal-100，标签/选中行背景）" },
+    "success": { "value": "#15803D", "type": "color", "desc": "生长绿（green-700）" },
+    "success-soft": { "value": "#DCFCE7", "type": "color", "desc": "生长绿浅底（green-100）" },
+    "warn": { "value": "#B45309", "type": "color", "desc": "暖琥珀（amber-700）" },
+    "warn-soft": { "value": "#FEF3C7", "type": "color", "desc": "暖琥珀浅底（amber-100）" },
+    "danger": { "value": "#B91C1C", "type": "color", "desc": "克制红（red-700）" },
+    "danger-soft": { "value": "#FEE2E2", "type": "color", "desc": "克制红浅底（red-100）" },
+    "ai-line": { "value": "linear-gradient(90deg, #3B82F6, #0F766E)", "type": "color", "desc": "AI 标识细线：蓝→绿（非紫粉主视觉，仅极细装饰线）" }
+  },
+  "font": {
+    "display": { "value": "'Noto Serif SC', serif", "type": "fontFamily", "desc": "标题与阅读/写作内容（书卷气·人味）" },
+    "body": { "value": "'Noto Sans SC', sans-serif", "type": "fontFamily", "desc": "UI 框架与标签（克制清晰）" },
+    "mono": { "value": "'JetBrains Mono', monospace", "type": "fontFamily", "desc": "仅字数/阅读时长/数据标签" }
+  },
+  "fontSize": {
+    "xs": { "value": "12px", "type": "dimension" },
+    "sm": { "value": "14px", "type": "dimension" },
+    "base": { "value": "16px", "type": "dimension", "desc": "正文基准，≥16px" },
+    "lg": { "value": "18px", "type": "dimension" },
+    "xl": { "value": "20px", "type": "dimension" },
+    "2xl": { "value": "24px", "type": "dimension" },
+    "3xl": { "value": "30px", "type": "dimension" },
+    "4xl": { "value": "36px", "type": "dimension" }
+  },
+  "fontWeight": {
+    "read": { "value": "400", "type": "fontWeight", "desc": "正文" },
+    "emphasize": { "value": "510", "type": "fontWeight", "desc": "小标题/按钮" },
+    "announce": { "value": "590", "type": "fontWeight", "desc": "大标题/CTA" }
+  },
+  "leading": {
+    "body": { "value": "1.6", "type": "number", "desc": "正文行高" },
+    "tight": { "value": "1.2", "type": "number", "desc": "标题行高" }
+  },
+  "tracking": {
+    "caps": { "value": "0.06em", "type": "dimension", "desc": "ALL CAPS / 标签字距" },
+    "display": { "value": "-0.02em", "type": "dimension", "desc": "大标题负字距" }
+  },
+  "space": {
+    "1": { "value": "4px", "type": "dimension" },
+    "2": { "value": "8px", "type": "dimension" },
+    "3": { "value": "12px", "type": "dimension" },
+    "4": { "value": "16px", "type": "dimension" },
+    "5": { "value": "20px", "type": "dimension" },
+    "6": { "value": "24px", "type": "dimension" },
+    "8": { "value": "32px", "type": "dimension" },
+    "10": { "value": "40px", "type": "dimension" },
+    "12": { "value": "48px", "type": "dimension" }
+  },
+  "radius": {
+    "sm": { "value": "4px", "type": "dimension" },
+    "md": { "value": "8px", "type": "dimension", "desc": "按钮/输入" },
+    "lg": { "value": "12px", "type": "dimension", "desc": "卡片" },
+    "xl": { "value": "16px", "type": "dimension", "desc": "弹窗" },
+    "2xl": { "value": "24px", "type": "dimension" },
+    "full": { "value": "9999px", "type": "dimension", "desc": "头像/圆形按钮" }
+  },
+  "shadow": {
+    "xs": { "value": "0 1px 2px rgba(28,25,23,0.04)", "type": "boxShadow" },
+    "sm": { "value": "0 1px 3px rgba(28,25,23,0.06), 0 1px 2px rgba(28,25,23,0.04)", "type": "boxShadow" },
+    "md": { "value": "0 4px 12px rgba(28,25,23,0.08)", "type": "boxShadow" }
+  },
+  "motion": {
+    "fast": { "value": "150ms", "type": "duration", "desc": "收敛基准值" },
+    "base": { "value": "200ms", "type": "duration" },
+    "ease": { "value": "cubic-bezier(0.2, 0, 0, 1)", "type": "cubicBezier" }
+  },
+  "focus": {
+    "ring": { "value": "0 0 0 3px rgba(15,118,110,0.35)", "type": "boxShadow", "desc": "松绿焦点环（键盘可达）" }
+  },
+  "icon": {
+    "library": { "value": "lucide-react", "type": "string", "desc": "全项目唯一图标源（ADR-010，禁 emoji/禁混用）" },
+    "size-inline": { "value": "16px", "type": "dimension", "desc": "行内图标" },
+    "size-button": { "value": "20px", "type": "dimension", "desc": "按钮内图标" },
+    "size-standalone": { "value": "24px", "type": "dimension", "desc": "独立图标" }
+  },
+  "toutiao": {
+    "h2": { "value": "◆ ", "type": "text", "desc": "小节标题前缀（黑菱形，几何非 emoji）" },
+    "h3": { "value": "○ ", "type": "text", "desc": "子标题前缀（白圆，与 ◆ 同家族弱一级）" },
+    "bullet": { "value": "▶ ", "type": "text", "desc": "列表要点前缀（黑右三角）" },
+    "emphasis-open": { "value": "【", "type": "text", "desc": "强调段左括" },
+    "emphasis-close": { "value": "】", "type": "text", "desc": "强调段右括" },
+    "quote-open": { "value": "「", "type": "text", "desc": "引用左括" },
+    "quote-close": { "value": "」", "type": "text", "desc": "引用右括" },
+    "divider": { "value": "· · ·", "type": "text", "desc": "节奏分隔（靠留白，非靠线）" },
+    "emojiRule": { "value": "≤2 种且不连续，且仅限正文内容层；与上方符号不冲突（符号非 emoji）", "type": "string" }
+  },
+  "wechat": {
+    "h2": { "value": "font-size:18px;font-weight:600;color:#0F766E;line-height:1.4;", "type": "inlineStyle", "desc": "微信标题（h1-6→p，靠内联样式模拟层级）" },
+    "h3": { "value": "font-size:16px;font-weight:600;color:#1C1917;line-height:1.4;", "type": "inlineStyle", "desc": "微信子标题" },
+    "quote": { "value": "border-left:3px solid #0F766E;padding:8px 12px;background:#CCFBF1;color:#1C1917;line-height:1.6;", "type": "inlineStyle", "desc": "微信引用块（松绿左线+浅底）" },
+    "divider": { "value": "border-top:1px solid #E7E5E4;margin:16px 0;", "type": "inlineStyle", "desc": "微信分割线" },
+    "section-pad": { "value": "6px", "type": "dimension", "desc": "section 横向 padding（C-2）" },
+    "codeBlock": { "value": "<p><code>…</code></p> + &nbsp; 模拟换行，禁 <pre>+white-space", "type": "string", "desc": "代码块写法（C-2）" },
+    "noBodyImage": { "value": "true", "type": "boolean", "desc": "MVP 正文默认不插图，仅封面（域名限定 mmbiz.qpic.cn）" }
+  }
+}

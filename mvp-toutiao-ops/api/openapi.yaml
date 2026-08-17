@@ -1,0 +1,696 @@
+openapi: 3.0.3
+info:
+  title: 头条号+公众号运营工具 API
+  version: 1.0.0
+  description: |
+    MVP API 契约（v1）。本文档是前端（Next.js）、后端（Route Handlers）联调的唯一依据。
+    所有端点强制带 /api/v1 前缀。统一响应包络 {code, data, message}。
+
+    关键合规约束（来自 Phase 1 调研，强制）：
+    - 不含任何自动推草稿/群发端点（微信 2026-03-27 条款 + 头条无官方草稿 API）。导出仅返回可复制粘贴的 HTML，由真人粘贴发布。
+    - 导出产物必须内嵌「AI 辅助创作」显式标识（不可关闭），依据《人工智能生成合成内容标识办法》第四条。
+    - 热榜仅采集 toutiao / baidu；微博仅支持人工导入，不自动采集。
+
+servers:
+  - url: http://localhost:3000
+    description: 本地开发（Lighthouse 容器内）
+
+tags:
+  - name: health
+  - name: auth
+  - name: hotlist
+  - name: topics
+  - name: articles
+  - name: generation
+  - name: export
+  - name: review
+  - name: features
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [health]
+      summary: 健康检查
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+              example: { code: 0, data: { status: "ok" }, message: "" }
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: 注册（MVP 单运营者，预留多账号）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AuthResult' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AuthResult' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 当前用户
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/User' }
+
+  /api/v1/hotlist:
+    get:
+      tags: [hotlist]
+      summary: 拉取热榜快照（仅 toutiao / baidu 自动采集）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema: { type: string, enum: [toutiao, baidu, all], default: all }
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date, description: 缺省为今天 }
+      responses:
+        '200':
+          description: 热榜条目列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/HotlistEntry' } }
+                          captured_at: { type: string, format: date-time }
+
+  /api/v1/hotlist/import:
+    post:
+      tags: [hotlist]
+      summary: 人工导入微博热搜（禁止自动采集，仅人工粘贴）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [title, rank]
+                    properties:
+                      title: { type: string }
+                      rank: { type: integer }
+                      heat: { type: integer, nullable: true }
+                      url: { type: string, nullable: true }
+      responses:
+        '201':
+          description: 导入成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+
+  /api/v1/topics:
+    get:
+      tags: [topics]
+      summary: 选题列表（按综合分排序）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [candidate, approved, rejected, all], default: all }
+        - name: min_score
+          in: query
+          schema: { type: number, description: 综合分阈值过滤 }
+      responses:
+        '200':
+          description: 分页选题
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/PaginatedTopics' }
+    post:
+      tags: [topics]
+      summary: 基于热榜生成选题候选（热度×相关度×竞争度评分）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hotlist_entry_ids]
+              properties:
+                hotlist_entry_ids: { type: array, items: { type: string, format: uuid } }
+                vertical: { type: string, description: 内容方向，如「个人成长」', default: "个人成长" }
+      responses:
+        '201':
+          description: 选题已生成
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Topic' }
+    delete:
+      tags: [topics]
+      summary: 删除选题（软删除）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+
+  /api/v1/topics/{id}:
+    get:
+      tags: [topics]
+      summary: 选题详情
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Topic' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/articles:
+    get:
+      tags: [articles]
+      summary: 草稿列表
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Article' }
+    post:
+      tags: [articles]
+      summary: 由选题创建草稿（空 Block AST）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic_id]
+              properties:
+                topic_id: { type: string, format: uuid }
+                title: { type: string, nullable: true }
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Article' }
+
+  /api/v1/articles/{id}:
+    get:
+      tags: [articles]
+      summary: 草稿详情（含 Block AST）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Article' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [articles]
+      summary: 更新草稿（标题 / Block AST / 标识开关）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticlePatch' }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Article' }
+    delete:
+      tags: [articles]
+      summary: 软删除草稿
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+
+  /api/v1/generation/articles/{id}/generate:
+    post:
+      tags: [generation]
+      summary: 由选题生成正文（写入 Block AST；可指定 provider/model）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string, enum: [hunyuan, zhipu, qwen], description: 覆盖默认适配层选择 }
+                model: { type: string, description: 具体模型名，如 hunyuan-hy3 / glm-4.6 / qwen-plus }
+                tone: { type: string, default: "温暖、有共鸣、可操作" }
+                length: { type: integer, default: 1200, description: 目标字数 }
+      responses:
+        '200':
+          description: 生成完成
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          article: { $ref: '#/components/schemas/Article' }
+                          usage: { $ref: '#/components/schemas/GenerationUsage' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/generation/articles/{id}/refine:
+    post:
+      tags: [generation]
+      summary: 在人工审核基础上改写某段落（不替换全文）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [block_index, instruction]
+              properties:
+                block_index: { type: integer, description: 目标 Block 下标 }
+                instruction: { type: string, description: 改写指令，如「更口语化」 }
+      responses:
+        '200':
+          description: 改写完成
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Article' }
+
+  /api/v1/export/articles/{id}/render:
+    post:
+      tags: [export]
+      summary: 渲染为平台 HTML（双渲染器；强制含 AI 标识页脚）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target: { type: string, enum: [wechat, toutiao] }
+      responses:
+        '200':
+          description: 渲染结果（返回可复制粘贴的 HTML 字符串）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          target: { type: string, enum: [wechat, toutiao] }
+                          html: { type: string, description: 复制粘贴到编辑器即可，已含标识页脚 }
+                          disclosure_included: { type: boolean, description: 恒为 true，不可关闭 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/export/articles/{id}/preview:
+    get:
+      tags: [export]
+      summary: 获取双平台预览（供前端双渲染器对照展示）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 双预览
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          wechat_html: { type: string }
+                          toutiao_html: { type: string }
+
+  /api/v1/review/articles/{id}/submit:
+    post:
+      tags: [review]
+      summary: 提交审核（真人编辑动作，写留痕）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string, nullable: true }
+      responses:
+        '200':
+          description: 已提交
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+
+  /api/v1/review/articles/{id}/approve:
+    post:
+      tags: [review]
+      summary: 真人审核通过（必须记录 editor_name + 时间戳，合规 C-7）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [editor_name]
+              properties:
+                editor_name: { type: string, description: 真人编辑署名 }
+                note: { type: string, nullable: true }
+      responses:
+        '200':
+          description: 已通过（可进入导出）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+
+  /api/v1/features:
+    get:
+      tags: [features]
+      summary: 当前用户 Feature Flag 状态（灰度）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        additionalProperties: { type: boolean }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: 参数错误
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiEnvelope'
+            example: { code: 400, data: null, message: "target 必填" }
+    Unauthorized:
+      description: 未认证
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 401, data: null, message: "未登录或 token 失效" }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 404, data: null, message: "not found" }
+    Conflict:
+      description: 冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 409, data: null, message: "邮箱已注册" }
+    RateLimited:
+      description: 大模型速率限制
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 429, data: null, message: "LLM 触发 RPM 限制，请稍后重试或切换 provider" }
+  schemas:
+    ApiEnvelope:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, description: 0=成功，非0=错误码 }
+        data: { nullable: true }
+        message: { type: string, description: 错误时人类可读描述 }
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AuthResult:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+    HotlistEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [toutiao, baidu, weibo_import] }
+        title: { type: string }
+        url: { type: string, nullable: true }
+        rank: { type: integer }
+        heat: { type: integer, nullable: true }
+        captured_at: { type: string, format: date-time }
+    Topic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        hotlist_entry_id: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        heat_score: { type: number }
+        relevance_score: { type: number }
+        competition_score: { type: number }
+        total_score: { type: number, description: 0.45·热度 + 0.40·相关度 − 0.15·竞争度 }
+        rationale: { type: object, nullable: true, description: 评分构成说明 }
+        status: { type: string, enum: [candidate, approved, rejected] }
+        created_at: { type: string, format: date-time }
+    PaginatedTopics:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Topic' } }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        has_more: { type: boolean }
+    Article:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        topic_id: { type: string, format: uuid, nullable: true }
+        title: { type: string, nullable: true }
+        block_ast: { $ref: '#/components/schemas/BlockAst' }
+        status: { type: string, enum: [draft, in_review, approved, exported] }
+        ai_disclosure: { type: boolean, default: true, description: 导出强制 true，不可关闭 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ArticlePatch:
+      type: object
+      properties:
+        title: { type: string }
+        block_ast: { $ref: '#/components/schemas/BlockAst' }
+    BlockAst:
+      type: object
+      required: [version, blocks]
+      properties:
+        version: { type: string, example: "1.0" }
+        blocks:
+          type: array
+          items:
+            type: object
+            description: 见 schemas/block-ast.schema.json
+    GenerationUsage:
+      type: object
+      properties:
+        provider: { type: string }
+        model: { type: string }
+        tokens_in: { type: integer }
+        tokens_out: { type: integer }
+        cost_cents: { type: number, description: 人民币分 }
+        latency_ms: { type: integer }

@@ -1,0 +1,118 @@
+/* 成长号工坊 · 设计 Token（CSS 变量层）
+ * 设计语言：纸感编辑 Paper & Quiet
+ * 唯一色值来源：design-tokens.json。组件严禁裸 hex（仅 #fff/#000 例外），一律 var(--xxx)。
+ * 图标：lucide-react 唯一（行内16 / 按钮内20 / 独立24）。
+ */
+
+:root {
+  /* ── 颜色：表面与前景 ── */
+  --bg: #FAFAF9;
+  --surface: #FFFFFF;
+  --surface-warm: #F5F5F4;
+  --fg: #1C1917;
+  --fg-2: #44403C;
+  --muted: #78716C;
+  --meta: #A8A29E;
+  --border: #E7E5E4;
+  --border-soft: #F5F5F4;
+
+  /* ── 颜色：强调（唯一，松绿）── */
+  --accent: #0F766E;
+  --accent-hover: #115E59;
+  --accent-active: #134E4A;
+  --accent-on: #FFFFFF;
+  --accent-soft: #CCFBF1;
+
+  /* ── 颜色：语义 ── */
+  --success: #15803D;
+  --success-soft: #DCFCE7;
+  --warn: #B45309;
+  --warn-soft: #FEF3C7;
+  --danger: #B91C1C;
+  --danger-soft: #FEE2E2;
+
+  /* ── 颜色：AI 标识细线（蓝→绿，非紫粉主视觉）── */
+  --ai-line: linear-gradient(90deg, #3B82F6, #0F766E);
+
+  /* ── 字体（首选 Noto 系列，断网/加载失败时回落到中文系统字体，保证中文排版体面）── */
+  --font-display: 'Noto Serif SC', "Songti SC", "SimSun", serif;
+  --font-body: 'Noto Sans SC', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── 字号 ── */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 36px;
+
+  /* ── 字重 ── */
+  --fw-read: 400;
+  --fw-emphasize: 510;
+  --fw-announce: 590;
+
+  /* ── 行高 / 字距 ── */
+  --lh-body: 1.6;
+  --lh-tight: 1.2;
+  --tracking-caps: 0.06em;
+  --tracking-display: -0.02em;
+
+  /* ── 间距（4px 网格）── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── 圆角 ── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── 阴影（克制）── */
+  --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-sm: 0 1px 3px rgba(28, 25, 23, 0.06), 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.08);
+
+  /* ── 动效 ── */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── 焦点环（键盘可达）── */
+  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.35);
+
+  /* ── 头条符号体系（几何非 emoji，渲染器消费）── */
+  --toutiao-h2: "◆ ";
+  --toutiao-h3: "○ ";
+  --toutiao-bullet: "▶ ";
+  --toutiao-emphasis: "【";
+  --toutiao-emphasis-close: "】";
+  --toutiao-quote: "「";
+  --toutiao-quote-close: "」";
+  --toutiao-divider: "· · ·";
+
+  /* ── 微信内联样式预设（导出渲染器消费，C-2）──
+     注：组件 UI 不在此使用；仅微信渲染器将下方值写入 style=""。
+     因 h1-6→p，标题层级靠内联样式模拟。 */
+  --wx-h2: font-size:18px; font-weight:600; color:#0F766E; line-height:1.4;
+  --wx-h3: font-size:16px; font-weight:600; color:#1C1917; line-height:1.4;
+  --wx-quote: border-left:3px solid #0F766E; padding:8px 12px; background:#CCFBF1; color:#1C1917; line-height:1.6;
+  --wx-divider: border-top:1px solid #E7E5E4; margin:16px 0;
+  --wx-section-pad: 6px;
+}
+
+/* 暗色态（可选，产品型默认浅色；如启用保持亮度递进，不反色） */
+@media (prefers-color-scheme: dark) {
+  /* MVP 不强制暗色；预留 hook，实现时按亮度递进而非直接反色 */
+}

@@ -1,0 +1,21 @@
+# ── 密钥与本地配置：绝不提交 ──
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# ── 依赖与构建产物 ──
+node_modules
+.next
+out
+dist
+build
+*.tsbuildinfo
+
+# ── 工具私有数据（工作台 memory/artifacts，非项目代码）──
+.workbuddy/
+
+# ── 系统与日志 ──
+.DS_Store
+*.log
+npm-debug.log*

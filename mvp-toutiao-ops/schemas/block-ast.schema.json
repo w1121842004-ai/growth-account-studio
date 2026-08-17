@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mvp-toutiao-ops.local/schemas/block-ast.schema.json",
+  "title": "BlockAst",
+  "description": "统一排版中间表示。一次语义化建模，两个渲染器消费：微信渲染器（全内联 style）与头条渲染器（零 CSS、Unicode 层级符号）。这是推翻「一套内联 HTML 兼容双平台」(B-1) 后的正确抽象。",
+  "type": "object",
+  "required": ["version", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "meta": {
+      "type": "object",
+      "description": "文章级元信息，渲染器可选使用",
+      "additionalProperties": false,
+      "properties": {
+        "vertical": { "type": "string", "description": "内容方向，如 个人成长" },
+        "source_topic": { "type": "string", "nullable": true }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/Block" }
+    }
+  },
+  "definitions": {
+    "Inline": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "marks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["bold", "italic", "strike", "code", "link", "underline"]
+          }
+        },
+        "href": {
+          "type": "string",
+          "format": "uri",
+          "description": "仅当 marks 含 link 时使用"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "marks": { "contains": { "const": "link" } } }
+          },
+          "then": { "required": ["href"] }
+        }
+      ]
+    },
+    "Block": {
+      "oneOf": [
+        { "$ref": "#/definitions/Heading" },
+        { "$ref": "#/definitions/Paragraph" },
+        { "$ref": "#/definitions/BulletList" },
+        { "$ref": "#/definitions/OrderedList" },
+        { "$ref": "#/definitions/Quote" },
+        { "$ref": "#/definitions/Code" },
+        { "$ref": "#/definitions/Callout" },
+        { "$ref": "#/definitions/Image" },
+        { "$ref": "#/definitions/Table" },
+        { "$ref": "#/definitions/Divider" }
+      ]
+    },
+    "Heading": {
+      "type": "object",
+      "required": ["type", "level", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "heading" },
+        "level": { "type": "integer", "enum": [1, 2, 3] },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "Paragraph": {
+      "type": "object",
+      "required": ["type", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "paragraph" },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "BulletList": {
+      "type": "object",
+      "required": ["type", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "bulletList" },
+        "items": {
+          "type": "array",
+          "items": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+        }
+      }
+    },
+    "OrderedList": {
+      "type": "object",
+      "required": ["type", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "orderedList" },
+        "items": {
+          "type": "array",
+          "items": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+        }
+      }
+    },
+    "Quote": {
+      "type": "object",
+      "required": ["type", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "quote" },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "Code": {
+      "type": "object",
+      "required": ["type", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "code" },
+        "lang": { "type": "string", "nullable": true },
+        "text": { "type": "string" }
+      }
+    },
+    "Callout": {
+      "type": "object",
+      "required": ["type", "variant", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "callout" },
+        "variant": { "type": "string", "enum": ["info", "warn", "tip"] },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "Image": {
+      "type": "object",
+      "required": ["type", "src", "alt"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "image" },
+        "src": { "type": "string", "format": "uri" },
+        "alt": { "type": "string" },
+        "caption": { "type": "string", "nullable": true }
+      }
+    },
+    "Table": {
+      "type": "object",
+      "required": ["type", "head", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "table" },
+        "head": { "type": "array", "items": { "$ref": "#/definitions/Inline" } },
+        "rows": {
+          "type": "array",
+          "items": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+        }
+      }
+    },
+    "Divider": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "divider" } }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0",
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "children": [{ "text": "每天进步 1% 的复利效应" }]
+        },
+        {
+          "type": "paragraph",
+          "children": [
+            { "text": "你不需要" },
+            { "text": "天赋异禀", "marks": ["bold"] },
+            { "text": "，只需要" },
+            { "text": "持续", "marks": ["bold"] },
+            { "text": "。" }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "items": [
+            [{ "text": "读书 10 页" }],
+            [{ "text": "复盘 5 分钟" }]
+          ]
+        },
+        {
+          "type": "callout",
+          "variant": "tip",
+          "children": [{ "text": "小贴士：把动作拆到不可能失败的最小单位。" }]
+        },
+        { "type": "divider" }
+      ]
+    }
+  ]
+}

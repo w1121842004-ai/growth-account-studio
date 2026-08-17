@@ -1,0 +1,643 @@
+openapi: 3.0.3
+info:
+  title: 成长号工坊（Toutiao Ops Studio）API
+  version: 1.0.0
+  description: |
+    MVP 前后端唯一契约（Spec §5 锁定）。所有端点前缀 /api/v1。
+    统一响应包络 {code, data, message}；分页 {items, total, page, limit, hasMore}。
+
+    版本锚定（Spec §4）：Next.js 16.2.11 / React 19.2.x / TypeScript 5.x /
+    Drizzle 最新稳定 / PostgreSQL 17 / Vercel AI SDK 6.x / node-cron 最新稳定。
+
+    合规约束（强制，不可妥协）：
+    - 无自动推草稿/群发端点（微信 2026-03 新规「非真人自动化创作」封号红线，Spec §3 Out-of-Scope）。
+    - /drafts/:id/render 与 /export 产出 HTML 必含显式 AI 标识（Spec C-5/R-4）。
+    - 未实质编辑（编辑距离低于阈值）导出返回 409（Spec AC-06/AC-07/§12）。
+    - 采集源仅白名单（Spec AC-02 / C-4），微博不采集。
+  license:
+    name: 内部 MVP
+
+servers:
+  - url: http://localhost:3000
+    description: 本地（Lighthouse + Docker Compose + Caddy）
+
+tags:
+  - name: auth
+  - name: topics
+  - name: drafts
+  - name: models
+  - name: sources
+  - name: usage
+  - name: settings
+
+paths:
+  # ----------------------------------------------------------------- auth
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: 注册（MVP 单用户本地账号起步，Spec §4 JWT）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/AuthResult' } } } ] }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: 登录（JWT 访问 15min + 刷新 7d）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/AuthResult' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新访问令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
+      responses:
+        '200':
+          description: 新令牌
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/AuthResult' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 当前用户
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/User' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ----------------------------------------------------------------- topics
+  /api/v1/topics:
+    get:
+      tags: [topics]
+      summary: 选题池列表（按 score 排序，支持 domain/platform 筛选，Spec §5/AC-01）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: domain
+          in: query
+          schema: { type: string, default: 个人成长 }
+        - name: platform
+          in: query
+          schema: { type: string, enum: [toutiao, baidu, zhihu, bilibili] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: minScore
+          in: query
+          schema: { type: number, description: 综合分阈值 }
+      responses:
+        '200':
+          description: 选题列表
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/PaginatedTopics' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/topics/score:
+    post:
+      tags: [topics]
+      summary: 触发一次选题打分（LLM 批量计算 relevance/competition/score，Spec AC-09）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, properties: { domain: { type: string }, batchSize: { type: integer, default: 50 } } }
+      responses:
+        '200':
+          description: 更新后的选题评分
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { type: array, items: { $ref: '#/components/schemas/Topic' } } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/v1/topics/{id}:
+    get:
+      tags: [topics]
+      summary: 选题详情（含来源与历史采纳）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/Topic' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- drafts
+  /api/v1/drafts/generate:
+    post:
+      tags: [drafts]
+      summary: 依选题生成草稿（SSE 流式返回 Block AST，Spec AC-03）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRequest' }
+      responses:
+        '200':
+          description: SSE 流式（text/event-stream），事件见 SSEEvent
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/SSEEvent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/v1/drafts/{id}:
+    get:
+      tags: [drafts]
+      summary: 草稿详情（Block AST + 编辑历史，Spec §5）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/Draft' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [drafts]
+      summary: 保存人工编辑（记录编辑距离 edit_trails，Spec C-7/AC-06）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftPatch' }
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/Draft' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/drafts/{id}/render:
+    get:
+      tags: [drafts]
+      summary: 渲染指定平台 HTML（双渲染器，必含 AI 标识，Spec AC-04/AC-05）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: platform
+          in: query
+          required: true
+          schema: { type: string, enum: [wechat, toutiao] }
+      responses:
+        '200':
+          description: 平台 HTML（含 AI 标识）
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/RenderResult' } } } ] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/drafts/{id}/export:
+    post:
+      tags: [drafts]
+      summary: 标记导出（复制由前端剪贴板完成；未实质编辑返回 409，Spec AC-06/AC-07/§12）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [platform], properties: { platform: { type: string, enum: [wechat, toutiao] } } }
+      responses:
+        '200':
+          description: 导出 HTML + 文本 + 发布 checklist
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/ExportResult' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 未实质编辑，禁止导出（Spec AC-06）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiEnvelope' }
+              example: { code: 409, data: null, message: "请先对草稿做实质编辑（编辑距离低于阈值）后再导出" }
+
+  # ----------------------------------------------------------------- models
+  /api/v1/models:
+    get:
+      tags: [models]
+      summary: 模型配置列表（Spec F5/ADR-004）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { type: array, items: { $ref: '#/components/schemas/ModelConfig' } } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/models/{id}:
+    put:
+      tags: [models]
+      summary: 切换/配置模型（baseURL/apiKey/model 来自配置，热切换不改代码）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelConfigPatch' }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/ModelConfig' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- sources
+  /api/v1/sources:
+    get:
+      tags: [sources]
+      summary: 采集源配置（含白名单，Spec AC-02/C-4）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { type: array, items: { $ref: '#/components/schemas/SourceConfig' } } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/sources/{id}:
+    put:
+      tags: [sources]
+      summary: 启停采集源
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [enabled], properties: { enabled: { type: boolean } } }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/SourceConfig' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- usage
+  /api/v1/usage:
+    get:
+      tags: [usage]
+      summary: 用量统计（token/成本/导出数，Spec §5）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/UsageStat' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ----------------------------------------------------------------- settings
+  /api/v1/settings:
+    get:
+      tags: [settings]
+      summary: 品牌人设/语调/默认排版偏好（Spec §5/§8）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/Settings' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [settings]
+      summary: 保存设置
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SettingsPatch' }
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema: { allOf: [ { $ref: '#/components/schemas/ApiEnvelope' }, { properties: { data: { $ref: '#/components/schemas/Settings' } } } ] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: 参数错误
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 400, data: null, message: "platform 必填且为 wechat|toutiao" }
+    Unauthorized:
+      description: 未认证或令牌失效
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 401, data: null, message: "未登录或 token 已失效" }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 404, data: null, message: "not found" }
+    Unprocessable:
+      description: 语义校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 422, data: null, message: "邮箱格式不合法" }
+    RateLimited:
+      description: 大模型速率限制或熔断开启
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 429, data: null, message: "模型触发 RPM 限制或熔断，请稍后重试或切换 provider" }
+    ServerError:
+      description: 服务内部错误
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiEnvelope' }
+          example: { code: 500, data: null, message: "内部错误，请重试" }
+  schemas:
+    ApiEnvelope:
+      type: object
+      required: [code, data, message]
+      properties:
+        code: { type: integer, description: 0=成功，非0=错误码（见各端点 responses）" }
+        data: { nullable: true }
+        message: { type: string, description: 错误时人类可读描述 }
+    Paginated:
+      type: object
+      properties:
+        items: { type: array }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        hasMore: { type: boolean }
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AuthResult:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer, description: 秒，默认 900 }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+    Topic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        platform: { type: string, enum: [toutiao, baidu, zhihu, bilibili] }
+        sourceItemKey: { type: string, description: 来源平台唯一键（榜单位置/条目 ID） }
+        bucketDate: { type: string, format: date }
+        title: { type: string }
+        heat: { type: integer }
+        relevance: { type: number }
+        competition: { type: number }
+        score: { type: number, description: 0.45·heat + 0.40·relevance − 0.15·competition（权重可配置，ADR-006） }
+        domain: { type: string, default: 个人成长 }
+        adopted: { type: boolean }
+        duplicateWarning: { type: boolean, nullable: true, description: 与现有爆款高重复预警（AC-01） }
+    PaginatedTopics:
+      allOf: [ { $ref: '#/components/schemas/Paginated' }, { properties: { items: { type: array, items: { $ref: '#/components/schemas/Topic' } } } } ]
+    GenerateRequest:
+      type: object
+      required: [topicId]
+      properties:
+        topicId: { type: string, format: uuid }
+        tone: { type: string, default: 温暖、有共鸣、可操作 }
+        length: { type: string, enum: [短, 中, 长], default: 中 }
+    SSEEvent:
+      type: object
+      description: text/event-stream 的 data: JSON 负载
+      properties:
+        type: { type: string, enum: [block, done, error] }
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/BlockAst'
+            - type: object
+              properties:
+                draftId: { type: string, format: uuid }
+                usage: { $ref: '#/components/schemas/GenerationUsage' }
+            - type: object
+              properties:
+                message: { type: string }
+        id: { type: string }
+    BlockAst:
+      type: object
+      required: [version, blocks]
+      properties:
+        version: { type: string, example: "1.0" }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/Block' }
+      description: 权威定义见 schemas/block-ast.schema.json 与 block-ast.types.ts
+    Block:
+      type: object
+      description: type ∈ paragraph/heading/quote/list/orderedList/code/image/divider（Spec §6）。marks 在 inline 节点上。
+    Draft:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        topicId: { type: string, format: uuid, nullable: true }
+        blocks: { $ref: '#/components/schemas/BlockAst' }
+        status: { type: string, enum: [draft, exported] }
+        editDistance: { type: integer, description: 最近一次保存的累计编辑距离（C-7/AC-06） }
+        createdAt: { type: string, format: date-time }
+        editTrails: { type: array, items: { $ref: '#/components/schemas/EditTrail' } }
+    DraftPatch:
+      type: object
+      required: [blocks]
+      properties:
+        blocks: { $ref: '#/components/schemas/BlockAst' }
+    EditTrail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        draftId: { type: string, format: uuid }
+        distance: { type: integer, description: 本次保存相对上一版的编辑距离 }
+        actions: { type: array, items: { type: string }, description: 编辑动作摘要（insert/delete/replace） }
+        createdAt: { type: string, format: date-time }
+    RenderResult:
+      type: object
+      properties:
+        platform: { type: string, enum: [wechat, toutiao] }
+        html: { type: string, description: 可复制粘贴到对应编辑器的 HTML（已含 AI 标识） }
+        disclosureInjected: { type: boolean, description: 恒为 true（C-5，不可关闭） }
+    ExportResult:
+      type: object
+      properties:
+        platform: { type: string, enum: [wechat, toutiao] }
+        html: { type: string }
+        text: { type: string, description: 纯文本版（前端写剪贴板） }
+        checklist:
+          type: array
+          items: { type: string }
+          description: 发布前清单（Spec C-6：头条勾选 AI 生成/辅助创作；公众号保留标识） }
+    ModelConfig:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        baseUrl: { type: string }
+        model: { type: string }
+        role: { type: string, enum: [primary, fallback] }
+        enabled: { type: boolean }
+    ModelConfigPatch:
+      type: object
+      properties:
+        baseUrl: { type: string }
+        apiKey: { type: string, description: 应用层加密后存储 }
+        model: { type: string }
+        role: { type: string, enum: [primary, fallback] }
+        enabled: { type: boolean }
+    SourceConfig:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        endpoint: { type: string }
+        enabled: { type: boolean }
+        lastFetch: { type: string, format: date-time, nullable: true }
+        robotsNote: { type: string, description: 合规备注（白名单依据） }
+    UsageStat:
+      type: object
+      properties:
+        tokensIn: { type: integer }
+        tokensOut: { type: integer }
+        costCents: { type: number, description: 人民币分 }
+        exportCount: { type: integer }
+        byModel: { type: array, items: { type: object, properties: { model: { type: string }, tokensIn: { type: integer }, tokensOut: { type: integer }, costCents: { type: number } } } }
+    Settings:
+      type: object
+      properties:
+        profile: { type: string, description: 品牌人设 }
+        tone: { type: string, description: 语调偏好 }
+        layout: { type: string, enum: [minimal, book, columns], description: 默认排版模板（Spec §7 三套） }
+    SettingsPatch:
+      type: object
+      properties:
+        profile: { type: string }
+        tone: { type: string }
+        layout: { type: string, enum: [minimal, book, columns] }
+    GenerationUsage:
+      type: object
+      properties:
+        provider: { type: string }
+        model: { type: string }
+        tokensIn: { type: integer }
+        tokensOut: { type: integer }
+        costCents: { type: number }
+        latencyMs: { type: integer }
+        cacheHit: { type: boolean, description: Prompt Cache 命中（混元 0.25，ADR-004） }

@@ -1,0 +1,78 @@
+# 部署编排（Spec ADR-001/ADR-005/ADR-007）：web + worker + pg + caddy
+# 用法：docker compose --env-file .env up -d --build
+name: growth-studio
+
+services:
+  # ── 数据库：PG 17，数据卷持久化 ──
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-growth_studio}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-growth_studio}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # 仅内网，不暴露宿主端口（Caddy/应用走 compose 网络）
+
+  # ── 一次性迁移：schema 同步（drizzle-kit push，幂等）──
+  migrate:
+    build: .
+    command: ['npx', 'drizzle-kit', 'push', '--force']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-growth_studio}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  # ── Web：Next.js 生产模式 ──
+  web:
+    build: .
+    command: ['npm', 'run', 'start']
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # compose 内网 DNS 直连 db service，不暴露宿主端口
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-growth_studio}
+      PORT: '3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - '3000'
+
+  # ── Worker：定时采集（node-cron 常驻，ADR-005）──
+  worker:
+    build: .
+    command: ['npx', 'tsx', 'scripts/worker.ts']
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-growth_studio}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # ── Caddy：反代 + 自动 HTTPS ──
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

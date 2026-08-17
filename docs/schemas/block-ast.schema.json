@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://toutiao-ops-studio.local/schemas/block-ast.schema.json",
+  "title": "BlockAst",
+  "description": "统一排版中间表示（Spec §6）。无 CSS；type 枚举固定；marks 在 inline 节点。权威 TS 类型见 block-ast.types.ts。",
+  "type": "object",
+  "required": ["version", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/Block" }
+    }
+  },
+  "definitions": {
+    "Inline": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "marks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["bold", "italic", "strike", "code", "link", "underline"] }
+        },
+        "href": { "type": "string", "format": "uri", "description": "仅当 marks 含 link" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "marks": { "contains": { "const": "link" } } } },
+          "then": { "required": ["href"] }
+        }
+      ]
+    },
+    "Block": {
+      "oneOf": [
+        { "$ref": "#/definitions/Heading" },
+        { "$ref": "#/definitions/Paragraph" },
+        { "$ref": "#/definitions/Quote" },
+        { "$ref": "#/definitions/List" },
+        { "$ref": "#/definitions/OrderedList" },
+        { "$ref": "#/definitions/Code" },
+        { "$ref": "#/definitions/Image" },
+        { "$ref": "#/definitions/Divider" }
+      ]
+    },
+    "Heading": {
+      "type": "object",
+      "required": ["type", "level", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "heading" },
+        "level": { "type": "integer", "enum": [1, 2, 3] },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "Paragraph": {
+      "type": "object",
+      "required": ["type", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "paragraph" },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "Quote": {
+      "type": "object",
+      "required": ["type", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "quote" },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/Inline" } }
+      }
+    },
+    "List": {
+      "type": "object",
+      "required": ["type", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "list" },
+        "items": { "type": "array", "items": { "type": "array", "items": { "$ref": "#/definitions/Inline" } } }
+      }
+    },
+    "OrderedList": {
+      "type": "object",
+      "required": ["type", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "orderedList" },
+        "items": { "type": "array", "items": { "type": "array", "items": { "$ref": "#/definitions/Inline" } } }
+      }
+    },
+    "Code": {
+      "type": "object",
+      "required": ["type", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "code" },
+        "lang": { "type": "string", "nullable": true },
+        "text": { "type": "string" }
+      }
+    },
+    "Image": {
+      "type": "object",
+      "required": ["type", "src", "alt"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "image" },
+        "src": { "type": "string", "format": "uri" },
+        "alt": { "type": "string" },
+        "caption": { "type": "string", "nullable": true }
+      }
+    },
+    "Divider": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": { "type": { "const": "divider" } }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0",
+      "blocks": [
+        { "type": "heading", "level": 1, "children": [{ "text": "每天进步 1% 的复利" }] },
+        {
+          "type": "paragraph",
+          "children": [
+            { "text": "你不需要" },
+            { "text": "天赋", "marks": ["bold"] },
+            { "text": "，只需要" },
+            { "text": "持续", "marks": ["bold"] },
+            { "text": "。" }
+          ]
+        },
+        { "type": "list", "items": [[{ "text": "读书 10 页" }], [{ "text": "复盘 5 分钟" }]] },
+        { "type": "quote", "children": [{ "text": "慢就是快。", "marks": ["italic"] }] },
+        { "type": "divider" }
+      ]
+    }
+  ]
+}

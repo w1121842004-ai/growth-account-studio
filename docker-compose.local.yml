@@ -1,0 +1,17 @@
+# 本地验证 override —— 不提交生产使用（生产用 docker-compose.yml 原样）
+# 用法：docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+services:
+  db:
+    # 本地调试直连（生产无此映射）
+    ports:
+      - '5433:5432'
+  web:
+    # 本地验证入口（生产走 Caddy 反代，无此映射）
+    ports:
+      - '3101:3000'
+  worker:
+    # 本地验证不启定时采集
+    profiles: ['local-skip']
+  caddy:
+    # 本地验证不启反代（80 可能被占）
+    profiles: ['local-skip']

@@ -1,0 +1,89 @@
+/* 成长号工坊 · 全局样式
+ * 设计语言：纸感编辑 Paper & Quiet（design-system/design-tokens.css 为唯一色值源）
+ * 禁止裸 hex；组件一律走 Token 语义类（bg-bg / text-fg / text-accent / border-border ...）
+ */
+@import "tailwindcss";
+@import "../../design-system/design-tokens.css";
+
+/* 将语义 Token 映射为 Tailwind 主题，供 bg-/text-/border-/rounded- 类使用 */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-warm: var(--surface-warm);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-meta: var(--meta);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-on: var(--accent-on);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: var(--lh-body);
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: var(--tracking-display);
+    color: var(--fg);
+  }
+  /* 键盘可达焦点环（P0 无障碍） */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+}
+
+/* AI 生成微光（MOTION_INTENSITY=3：仅 hover/active + 骨架微光） */
+@keyframes gos-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* 内容正文排版（编辑器/预览消费） */
+.prose-quiet p {
+  margin: 0 0 var(--space-5);
+  line-height: var(--lh-body);
+}
+.prose-quiet h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: var(--space-8) 0 var(--space-4);
+}

@@ -1,0 +1,29 @@
+# Caddy 配置（ADR-001：固定出口 IP + 国内访问质量）
+# 生产：把 example.com 换成你的域名（需先解析 A 记录到服务器 IP），Caddy 自动签发 HTTPS
+# 调试：无域名时可用 {SERVER_IP}.nip.io 或先注释域名段改用 :80
+
+example.com {
+	# 自动 HTTPS（Let's Encrypt）；国内建议先手动放行 80 端口做 ACME 校验
+	encode gzip
+
+	# 反代 Next.js 应用（compose 内网服务名 web）
+	reverse_proxy web:3000
+
+	# 安全头基线
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# 本地/IP 调试用（无域名时启用，80 端口明文）
+#:80 {
+#	encode gzip
+#	reverse_proxy web:3000
+#}
